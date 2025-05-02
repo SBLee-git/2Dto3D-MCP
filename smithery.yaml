@@ -1,4 +1,4 @@
-name: map3d-server
+name: 2Dto3D-MCPServer
 description: Convert base64 image of 2D maps into zipped 3D OBJ files using FastMCP
 version: 1.0.0
 
