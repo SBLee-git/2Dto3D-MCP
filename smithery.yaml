@@ -1,0 +1,12 @@
+name: map3d-server
+description: Convert base64 image of 2D maps into zipped 3D OBJ files using FastMCP
+version: 1.0.0
+
+startCommand:
+  type: stdio
+  configSchema: {}
+  commandFunction: |-
+    (config) => ({
+      "command": "python",
+      "args": ["mcp_server.py"]
+    })
