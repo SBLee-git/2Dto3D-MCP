@@ -1,17 +1,18 @@
 import os
+import sys
 import cv2
 import base64
 import zipfile
 import shutil
 import uuid
 import numpy as np
-import sys
+import open3d as o3d
+import mapbox_earcut as earcut
+from shapely.geometry import Polygon
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi_mcp import FastApiMCP
-from shapely.geometry import Polygon
-import mapbox_earcut as earcut
-import open3d as o3d
+from fastapi_mcp.types import ToolRequest
 from pydantic import BaseModel
 
 # ✅ FastAPI 인스턴스 생성
@@ -20,11 +21,15 @@ os.makedirs(STATIC_DIR, exist_ok=True)
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-# ✅ MCP 서버 마운트
+# ✅ MCP 등록
 mcp = FastApiMCP(app)
 mcp.mount()
 
-# ✅ 이미지 디코딩 함수
+# ✅ 입력 모델
+class ImagePayload(BaseModel):
+    base64_image: str
+
+# ✅ base64 → 이미지 디코딩
 def decode_base64_image(base64_str: str) -> np.ndarray:
     try:
         img_bytes = base64.b64decode(base64_str)
@@ -34,7 +39,7 @@ def decode_base64_image(base64_str: str) -> np.ndarray:
         print(f"[ERROR] 이미지 디코딩 실패: {str(e)}", file=sys.stderr)
         raise
 
-# ✅ Open3D 메시 → OBJ 문자열 변환
+# ✅ Open3D 메시 → OBJ 문자열
 def mesh_to_obj_string(mesh: o3d.geometry.TriangleMesh) -> str:
     verts = np.asarray(mesh.vertices)
     faces = np.asarray(mesh.triangles)
@@ -42,7 +47,7 @@ def mesh_to_obj_string(mesh: o3d.geometry.TriangleMesh) -> str:
     lines += [f"f {a+1} {b+1} {c+1}" for a, b, c in faces]
     return "\n".join(lines)
 
-# ✅ zip 생성 및 반환 URL 처리 (환경변수 사용)
+# ✅ 이미지 → OBJ zip → URL 반환
 def generate_zip_url(img: np.ndarray) -> str:
     cm_per_pixel = 1.0
     wall_height = 200
@@ -124,26 +129,22 @@ def generate_zip_url(img: np.ndarray) -> str:
             os.remove(obj_path)
 
     shutil.move(zip_path, zip_static_path)
-
-    # ✅ 환경변수 기반 반환 URL 처리
     static_url_base = os.getenv("STATIC_URL_BASE", "/static")
     return f"{static_url_base}/{file_id}"
 
-# ✅ API Input 정의
-class ImagePayload(BaseModel):
-    base64_image: str
-
-@app.post("/convert_map", operation_id="convert_map")
-async def convert_map(payload: ImagePayload) -> str:
+# ✅ MCP Tool 등록 (Lazy 방식)
+@mcp.tools.register()
+async def convert_map(req: ToolRequest[ImagePayload]) -> str:
     print("[MCP] convert_map() 실행", file=sys.stderr)
     try:
-        img = decode_base64_image(payload.base64_image)
+        img = decode_base64_image(req.body.base64_image)
         return generate_zip_url(img)
     except Exception as e:
         print(f"[MCP ERROR] {str(e)}", file=sys.stderr)
         return f"[ERROR] {str(e)}"
 
-# ✅ 실행 코드
+# ✅ 실행 코드 (로컬에서만 작동)
 if __name__ == "__main__":
     import uvicorn
+    print("[LOCAL] Running locally via __main__")
     uvicorn.run(app, host="0.0.0.0", port=8001)
