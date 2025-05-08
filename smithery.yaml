@@ -1,12 +1,21 @@
 name: 2Dto3D-MCPServer
-description: Convert base64 image of 2D maps into zipped 3D OBJ files using FastMCP
-version: 1.0.0
+description: Convert base64-encoded 2D map images into zipped 3D OBJ files via FastAPI MCP server.
+version: 1.0.1
 
+# 🟢 MCP 서버 실행 방식 정의
 startCommand:
   type: stdio
   configSchema: {}
   commandFunction: |-
     (config) => ({
-      "command": "python",
-      "args": ["mcp_server.py"]
+      command: "uvicorn",
+      args: ["mcp_server:app", "--host", "0.0.0.0", "--port", "8001"]
     })
+
+# 🟡 MCP의 고정 환경변수 설정 (실행 시 자동 주입됨)
+env:
+  STATIC_URL_BASE: "/static"
+
+# 🟠 사용할 포트 명시 (Smithery가 포트 매핑 처리함)
+ports:
+  - 8001
