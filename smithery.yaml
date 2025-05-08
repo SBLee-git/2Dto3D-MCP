@@ -2,20 +2,26 @@ name: 2Dto3D-MCPServer
 description: Convert base64-encoded 2D map images into zipped 3D OBJ files via FastAPI MCP server.
 version: 1.0.1
 
-# 🟢 MCP 서버 실행 방식 정의
+# stdio 대신 HTTP 사용
 startCommand:
-  type: stdio
+  type: http
   configSchema: {}
-  commandFunction: |-
-    (config) => ({
-      command: "uvicorn",
-      args: ["mcp_server:app", "--host", "0.0.0.0", "--port", "8001"]
-    })
 
-# 🟡 MCP의 고정 환경변수 설정 (실행 시 자동 주입됨)
+# 건강 검진 및 타임아웃 설정 추가
+healthCheck:
+  path: /health
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 30
+
+startupProbe:
+  path: /health
+  failureThreshold: 10
+  periodSeconds: 3
+
+# 기존 환경변수 설정 유지
 env:
   STATIC_URL_BASE: "/static"
 
-# 🟠 사용할 포트 명시 (Smithery가 포트 매핑 처리함)
 ports:
   - 8001
