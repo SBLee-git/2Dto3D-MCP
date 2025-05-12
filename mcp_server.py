@@ -1,7 +1,7 @@
 import os
 import sys
 import base64
-import uuid
+import hashlib                    # ← 변경: 캐싱용 해시
 import zipfile
 import shutil
 import numpy as np
@@ -9,55 +9,67 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi_mcp import FastApiMCP
 from pydantic import BaseModel
-
-# OpenCV, Open3D 등은 함수 내부에서 임포트 (Smithery lazy loading 대응)
 from shapely.geometry import Polygon
+from shapely.ops import unary_union  # ← 변경
 
 STATIC_DIR = "static"
 os.makedirs(STATIC_DIR, exist_ok=True)
-app = FastAPI()
+
+app = FastAPI(
+    title="2Dto3D MCP Server",
+    version="1.0.2",  # 버전 업데이트 ← 변경
+    description="Convert 2D map images (base64) to zipped 3D OBJ files using FastAPI and MCP."
+)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-# MCP 서버 마운트 (공식 문서 방식)
 mcp = FastApiMCP(app)
 mcp.mount()
 
-# 입력 모델
 class ImagePayload(BaseModel):
     base64_image: str
 
-# Open3D 메시 → OBJ 문자열 변환
 def mesh_to_obj_string(mesh):
-    import numpy as np
     verts = np.asarray(mesh.vertices)
     faces = np.asarray(mesh.triangles)
     lines = [f"v {x} {y} {z}" for x, y, z in verts]
     lines += [f"f {a+1} {b+1} {c+1}" for a, b, c in faces]
     return "\n".join(lines)
 
-# 변환 엔드포인트 (공식 MCP 방식)
-@app.post("/convert_map", operation_id="convert_map")
-async def convert_map(payload: ImagePayload) -> str:
-    print("[MCP] convert_map() 실행", file=sys.stderr)
+@app.post(
+    "/convert_map",
+    operation_id="convert_map_tool_walls_only",
+    summary="Convert 2D Map Image to 3D Wall-Only OBJ File URLs",
+    response_description="A URL to the generated ZIP containing individual wall OBJ files."
+)
+async def convert_map_walls_only_endpoint(payload: ImagePayload) -> str:
     try:
-        # 1. base64 → 이미지 디코딩
         import cv2
+        import open3d as o3d
+
+        # ─── 캐싱: base64 이미지 해시 계산 ───────────────────────────── # ← 변경
         img_bytes = base64.b64decode(payload.base64_image)
+        hash_key = hashlib.md5(img_bytes).hexdigest()
+        file_id = f"map_walls_only_{hash_key}.zip"
+        zip_static_path = os.path.join(STATIC_DIR, file_id)
+        static_url_base = os.getenv("STATIC_URL_BASE", "/static")
+        cached_url = f"{static_url_base.rstrip('/')}/{file_id}"
+        if os.path.exists(zip_static_path):
+            print(f"[CACHE] Returning cached result: {file_id}", file=sys.stderr)
+            return cached_url
+        # ───────────────────────────────────────────────────────────────
+
         img_array = np.frombuffer(img_bytes, dtype=np.uint8)
         img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-
-        # 2. 2D → 3D 변환 및 zip 생성
-        import open3d as o3d
-        import mapbox_earcut as earcut
+        if img is None:
+            raise ValueError("Failed to decode image.")
 
         cm_per_pixel = 1.0
-        wall_height = 200
+        wall_height = 200.0
         wall_thick = 2
+
         temp_dir = "mcp_temp"
         os.makedirs(temp_dir, exist_ok=True)
-        file_id = f"map_{uuid.uuid4().hex}.zip"
-        zip_path = os.path.join(temp_dir, file_id)
-        zip_static_path = os.path.join(STATIC_DIR, file_id)
+        zip_path_temp = os.path.join(temp_dir, file_id)
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         edges = cv2.Canny(gray, 50, 150)
@@ -67,75 +79,92 @@ async def convert_map(payload: ImagePayload) -> str:
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, ker2, iterations=2)
 
         n_labels, labels = cv2.connectedComponents(mask)
-        polygons = []
+        parts = []
 
         for lid in range(1, n_labels):
-            comp = (labels == lid).astype(np.uint8) * 255
-            if cv2.countNonZero(comp) < 20:
+            comp_mask = (labels == lid).astype(np.uint8) * 255
+            if cv2.countNonZero(comp_mask) < 20:
                 continue
-            cnts, hier = cv2.findContours(comp, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
-            if hier is None:
+
+            contours, hierarchy = cv2.findContours(comp_mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+            if hierarchy is None:
                 continue
-            for idx, cnt in enumerate(cnts):
-                if hier[0][idx][3] != -1:
-                    continue
-                ext = cnt.reshape(-1, 2)
+
+            # ─── Shapely로 contour 병합 ─────────────────────────────── # ← 변경
+            polys = []
+            for i, cnt in enumerate(contours):
+                ext = [tuple(p[0]) for p in cnt]
+                # 내부 홀 수집
                 holes = []
-                child = hier[0][idx][2]
+                child = hierarchy[0][i][2]
                 while child != -1:
-                    holes.append(cnts[child].reshape(-1, 2))
-                    child = hier[0][child][0]
-                poly = Polygon(ext, holes)
-                if poly.is_valid and poly.area > 1.0:
-                    polygons.append(poly)
+                    holes.append([tuple(p[0]) for p in contours[child]])
+                    child = hierarchy[0][child][0]
+                polys.append(Polygon(ext, holes))
+            merged = unary_union(polys)
+            # ─────────────────────────────────────────────────────────────
 
-        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-            for i, poly in enumerate(polygons):
-                ext = list(poly.exterior.coords)[:-1]
-                holes = [list(h.coords)[:-1] for h in poly.interiors]
-                all_pts = ext.copy()
-                ring_ends = [len(ext)]
-                for hole in holes:
-                    all_pts.extend(hole)
-                    ring_ends.append(len(all_pts))
-                pts2d = np.array(all_pts, dtype=np.float32)
+            verts_local, faces_local = [], []
+            offset_local = 0
 
-                tri_idx = earcut.triangulate_float32(pts2d, ring_ends)
-                verts = [[x, y, 0.0] for x, y in pts2d]
-                faces = [[tri_idx[k], tri_idx[k+1], tri_idx[k+2]] for k in range(0, len(tri_idx), 3)]
+            # 외곽선 한 번만
+            exterior = list(merged.exterior.coords)
+            for j in range(len(exterior)):
+                x0,y0 = exterior[j]; x1,y1 = exterior[(j+1)%len(exterior)]
+                verts_local.extend([[x0,y0,0],[x1,y1,0],[x1,y1,wall_height],[x0,y0,wall_height]])
+                faces_local.extend([
+                    [offset_local, offset_local+1, offset_local+2],
+                    [offset_local+2, offset_local+3, offset_local]
+                ])
+                offset_local += 4
 
-                for j in range(len(ext)):
-                    x0, y0 = ext[j]
-                    x1, y1 = ext[(j+1) % len(ext)]
-                    base = len(verts)
-                    verts.extend([
-                        [x0, y0, 0.0], [x1, y1, 0.0],
-                        [x1, y1, wall_height], [x0, y0, wall_height]
+            # 내부 홀
+            for interior in merged.interiors:
+                hole_coords = list(interior.coords)
+                for k in range(len(hole_coords)):
+                    x0,y0 = hole_coords[k]; x1,y1 = hole_coords[(k+1)%len(hole_coords)]
+                    verts_local.extend([[x0,y0,0],[x1,y1,0],[x1,y1,wall_height],[x0,y0,wall_height]])
+                    faces_local.extend([
+                        [offset_local, offset_local+2, offset_local+1],
+                        [offset_local+2, offset_local+3, offset_local]
                     ])
-                    faces.extend([[base, base+1, base+2], [base+2, base+3, base+0]])
+                    offset_local += 4
 
+            if verts_local:
+                parts.append((verts_local, faces_local))
+
+        if not parts:
+            with zipfile.ZipFile(zip_path_temp, "w") as zf:
+                zf.writestr("empty.txt", "No geometry was generated.")
+            shutil.move(zip_path_temp, zip_static_path)
+            return cached_url
+
+        # ─── 개별 OBJ 생성 ───────────────────────────────────────────
+        with zipfile.ZipFile(zip_path_temp, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for idx, (verts, faces) in enumerate(parts):
                 mesh = o3d.geometry.TriangleMesh(
                     vertices=o3d.utility.Vector3dVector(np.array(verts) * cm_per_pixel),
                     triangles=o3d.utility.Vector3iVector(np.array(faces, dtype=np.int32))
                 )
                 mesh.compute_vertex_normals()
                 obj_str = mesh_to_obj_string(mesh)
-                obj_fname = f"wall_{i}.obj"
-                obj_path = os.path.join(temp_dir, obj_fname)
-                with open(obj_path, "w") as f:
-                    f.write(obj_str)
-                zf.write(obj_path, arcname=obj_fname)
-                os.remove(obj_path)
+                zf.writestr(f"wall_{idx}.obj", obj_str)
+        # ─────────────────────────────────────────────────────────────
 
-        shutil.move(zip_path, zip_static_path)
-        static_url_base = os.getenv("STATIC_URL_BASE", "/static")
-        return f"{static_url_base}/{file_id}"
+        shutil.move(zip_path_temp, zip_static_path)
+        print(f"[API] Result URL: {cached_url}", file=sys.stderr)
+        return cached_url
 
+    except ImportError as ie:
+        error_message = f"Import error: {str(ie)}."
+        print(f"[MCP ERROR] {error_message}", file=sys.stderr)
+        return f"[ERROR] {error_message}"
     except Exception as e:
-        print(f"[MCP ERROR] {str(e)}", file=sys.stderr)
-        return f"[ERROR] {str(e)}"
+        import traceback
+        error_message = f"Error: {type(e).__name__}: {e}"
+        print(f"[MCP ERROR] {error_message}\n{traceback.format_exc()}", file=sys.stderr)
+        return f"[ERROR] {error_message}"
 
-# Smithery/클라우드 환경에서 health check 지원
 @app.get("/health")
 def health():
     return {"status": "ok"}
