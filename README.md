@@ -19,7 +19,7 @@ REST API를 통해 2D 데이터를 입력받아 3D 모델 파일(OBJ)로 변환�
 - **패키지/환경 관리**: uv, pyproject.toml, requirements.txt
 - **컨테이너**: Docker
 - **CI/CD**: Smithery
-- **기타**: uv.lock, runtime.txt 등
+- **기타**: uv.lock 등
 
 ---
 ## 🚀 서비스 개요
