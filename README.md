@@ -1,7 +1,20 @@
-# 2Dto3D-MCP
+# 🗺️ 2Dto3D-MCP
 
-2D 이미지를 3D 메시(mesh)로 변환하는 서버 애플리케이션  
-REST API를 통해 2D 데이터를 입력받아 3D 모델 파일(OBJ)로 변환해주는 서비스입니다.
+> **2D 이미지를 업로드하면 3D 메시(OBJ)로 변환해주는 서버 애플리케이션**  
+> FastAPI · Open3D · Docker · MCP Protocol 지원
+
+![Python](https://img.shields.io/badge/python-3.11-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-%F0%9F%9A%80-brightgreen)
+![Docker](https://img.shields.io/badge/docker-ready-2496ed)
+![License](https://img.shields.io/github/license/SBLee-git/2Dto3D-MCP)
+
+---
+
+## ⚡️ TL;DR
+
+- **What**: 2D → 3D 변환 REST API 서버
+- **Why**: 게임 맵/시제품을 3D로 빠르게 프로토타이핑
+- **Tech**: Python 3.11 · FastAPI · Open3D · Docker
 
 ---
 
@@ -15,18 +28,18 @@ REST API를 통해 2D 데이터를 입력받아 3D 모델 파일(OBJ)로 변환�
 ## 🛠️ 기술 스택 (Tech Stack)
 - **언어**: Python 3.11
 - **웹 프레임워크**: FastAPI
-- **3D 처리 라이브러리**: Open3D
+- **3D 처리 라이브러리**: Open3D, NumPy, Shapely, mapbox-earcut
 - **패키지/환경 관리**: uv, pyproject.toml, requirements.txt
-- **CI/CD**: Docker
+- **CI/CD**: Docker (+ Smithery 지원)
 - **기타**: uv.lock 등
 
 ---
 ## 🚀 서비스 개요
 
-- **2D 이미지를 업로드하면 3D 메시 파일로 변환하여 반환**
-- OBJ 3D 포맷 지원
+- **2D 이미지를 업로드하면 3D 메시 파일(OBJ)로 변환하여 반환**
 - REST API 기반으로 외부 서비스와 연동 가능
 - Docker 컨테이너로 손쉽게 배포 및 확장 가능
+- OBJ 포맷 지원 (Unreal/Unity 등에서 바로 import)
 
 ---
 ## 📡 API 예시
