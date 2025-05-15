@@ -8,7 +8,7 @@ REST API를 통해 2D 데이터를 입력받아 3D 모델 파일(OBJ)로 변환�
 ## 🧑‍💻 내 역할 (My Role)
 - **백엔드 개발**: FastAPI 기반 서버 구현 및 2D→3D 변환 로직 개발
 - **패키지 관리 및 환경 구성**: `uv`, `pyproject.toml` 등 최신 Python 패키지 관리 도구 적용
-- **배포 자동화**: Docker 및 Smithery를 활용한 CI/CD 파이프라인 구축
+- **배포 자동화**: Docker를 활용한 CI/CD 파이프라인 구축
 
 ---
 
@@ -17,8 +17,7 @@ REST API를 통해 2D 데이터를 입력받아 3D 모델 파일(OBJ)로 변환�
 - **웹 프레임워크**: FastAPI
 - **3D 처리 라이브러리**: Open3D
 - **패키지/환경 관리**: uv, pyproject.toml, requirements.txt
-- **컨테이너**: Docker
-- **CI/CD**: Smithery
+- **CI/CD**: Docker
 - **기타**: uv.lock 등
 
 ---
