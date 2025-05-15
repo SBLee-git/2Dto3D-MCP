@@ -6,7 +6,6 @@
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-%F0%9F%9A%80-brightgreen)
 ![Docker](https://img.shields.io/badge/docker-ready-2496ed)
-![License](https://img.shields.io/github/license/SBLee-git/2Dto3D-MCP)
 
 ---
 
