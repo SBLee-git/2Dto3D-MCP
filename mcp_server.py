@@ -26,10 +26,8 @@ class ImagePayload(BaseModel):
     base64_image: str
 
 # ────────────────────────────────
-# 3. MCP Tool로 변환 함수 등록
-#    (Smithery가 자동 인식하는 함수)
+# 3. 변환 함수 정의 (툴)
 # ────────────────────────────────
-@mcp.tool()  # 이게 반드시 필요!
 def convert_map(payload: ImagePayload) -> str:
     """
     2D 이미지를 3D 벽체 OBJ 파일(zip)로 변환하고, URL을 반환하는 MCP Tool 함수
@@ -141,6 +139,7 @@ def convert_map(payload: ImagePayload) -> str:
 
         with zipfile.ZipFile(zip_path_temp, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             for idx, (verts, faces) in enumerate(parts):
+                import open3d as o3d
                 mesh = o3d.geometry.TriangleMesh(
                     vertices=o3d.utility.Vector3dVector(np.array(verts) * cm_per_pixel),
                     triangles=o3d.utility.Vector3iVector(np.array(faces, dtype=np.int32))
@@ -164,19 +163,24 @@ def convert_map(payload: ImagePayload) -> str:
         return f"[ERROR] {error_message}"
 
 # ────────────────────────────────
-# 4. MCP 엔드포인트 등록 (필수!)
+# 4. MCP 툴 등록 (register() 방식)
 # ────────────────────────────────
-mcp.mount()  # 이걸 꼭 마지막에! (Tool Discovery 가능)
+mcp.tools.register(convert_map)  # <-- 반드시 이렇게!
 
 # ────────────────────────────────
-# 5. HealthCheck 엔드포인트 (컨테이너용)
+# 5. MCP 엔드포인트 활성화
+# ────────────────────────────────
+mcp.mount()  # <-- 꼭 필요!
+
+# ────────────────────────────────
+# 6. HealthCheck 엔드포인트 (컨테이너용)
 # ────────────────────────────────
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 # ────────────────────────────────
-# 6. 직접 실행용 (개발·로컬테스트)
+# 7. 직접 실행용 (개발·로컬테스트)
 # ────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
