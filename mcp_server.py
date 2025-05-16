@@ -1,7 +1,7 @@
 import os
 import sys
 import base64
-import hashlib                    # ← 변경: 캐싱용 해시
+import hashlib                    # 캐싱용 해시
 import zipfile
 import shutil
 import numpy as np
@@ -10,14 +10,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi_mcp import FastApiMCP
 from pydantic import BaseModel
 from shapely.geometry import Polygon
-from shapely.ops import unary_union  # ← 변경
+from shapely.ops import unary_union  # Shapely 연산자
 
 STATIC_DIR = "static"
 os.makedirs(STATIC_DIR, exist_ok=True)
 
 app = FastAPI(
     title="2Dto3D MCP Server",
-    version="1.0.2",  # 버전 업데이트 ← 변경
+    version="1.0.2",  # 버전 
     description="Convert 2D map images (base64) to zipped 3D OBJ files using FastAPI and MCP."
 )
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -46,7 +46,7 @@ async def convert_map_walls_only_endpoint(payload: ImagePayload) -> str:
         import cv2
         import open3d as o3d
 
-        # ─── 캐싱: base64 이미지 해시 계산 ───────────────────────────── # ← 변경
+        # ─── 캐싱: base64 이미지 해시 계산 ───────────────────────────── 
         img_bytes = base64.b64decode(payload.base64_image)
         hash_key = hashlib.md5(img_bytes).hexdigest()
         file_id = f"map_walls_only_{hash_key}.zip"
@@ -90,7 +90,7 @@ async def convert_map_walls_only_endpoint(payload: ImagePayload) -> str:
             if hierarchy is None:
                 continue
 
-            # ─── Shapely로 contour 병합 ─────────────────────────────── # ← 변경
+            # ─── Shapely로 contour 병합 ─────────────────────────────── 
             polys = []
             for i, cnt in enumerate(contours):
                 ext = [tuple(p[0]) for p in cnt]
